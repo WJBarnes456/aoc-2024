@@ -1,0 +1,11 @@
+# ignore all dotfiles other than the gitignore
+.*
+!.gitignore
+
+# ignore all input files
+test_input*
+input
+
+# ignore .bak files from notepad++
+# (and please forgive my low-tech choice of tech for this)
+*.bak
