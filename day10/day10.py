@@ -73,30 +73,21 @@ class Puzzle:
     
     def solve(self):
         # part 1: sum the score of every trailhead, so iterate from each peak until we've propagated it to every node that it could reach
-        # I implemented this as a DFS rather than a BFS, but either's fine
-        for peak in self.peaks:
-            queue = [peak]
-            while len(queue) > 0:
-                node = queue.pop()
-                print(f"Visiting {node} (leads to {[str(n) for n in node.leads_to]})")
-                
-                for candidate in node.leads_to:
-                    if peak not in candidate.visible_9s:
-                        candidate.visible_9s.add(peak)
-                        queue.append(candidate)
-
+        # I originally implemented this as a separate DFS (thinking the adjacency relation might change), but after seeing part2 I realised you can roll it with the rating
         # part 2: sum the _rating_ of each trailhead, which you can do since each peak has a rating of 1, and when you BFS you visit the node of each level in turn
         # you could do this in a single pass by propagating the visible peaks at each step too, but it's easier to reason about doing it in two passes
         
-        # start at all the peaks, which each only have one way to reach them
+        # start at all the peaks, which each only have one way to reach them and can only see themselves 
         queue = deque()
         for peak in self.peaks:
             peak.rating = 1
+            peak.visible_9s.add(peak)
             queue.append(peak)
         
         # for every other node, their base rating is 0 (set in constructor), so we can simply add the currently-being-considered node's rating to it
         # starting from all the peaks means we can sum them in one fell swoop and know we've visited every outbound path from there already, i.e. we know it propagates safely
         # (wouldn't work if the adjacency relation weren't one-way)
+        # we only maintain the ever queued set so that we don't end up blowing up for each possible route
         ever_queued_nodes = set()
         while len(queue) > 0:
             node = queue.popleft()
@@ -104,6 +95,7 @@ class Puzzle:
             
             for candidate in node.leads_to:
                 candidate.rating += node.rating
+                candidate.visible_9s = candidate.visible_9s.union(node.visible_9s)
                 if candidate not in ever_queued_nodes:
                     ever_queued_nodes.add(candidate)
                     queue.append(candidate)
@@ -119,7 +111,7 @@ def part1(puzzle):
     total = 0
     for trailhead in puzzle.trailheads:
         th_score = trailhead.score()
-        print(f"Trailhead {trailhead} has score {th_score}")
+        #print(f"Trailhead {trailhead} has score {th_score}")
         total += th_score
     
     return total
@@ -128,7 +120,7 @@ def part2(puzzle):
     total = 0
     for trailhead in puzzle.trailheads:
         th_rating = trailhead.rating
-        print(f"Trailhead {trailhead} has rating {th_rating}")
+        #print(f"Trailhead {trailhead} has rating {th_rating}")
         total += th_rating
     
     return total
