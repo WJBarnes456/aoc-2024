@@ -129,64 +129,56 @@ class Map:
                     continue
 
                 # if we hit a partial box, then we have two cases...
-                case Tile.BOX_LEFT | Tile.BOX_RIGHT:
-                    # if we're moving horizontally, it's no different to the one box case. just stack that up and move them at once
-                    if delta[1] == 0:
-                        continue
+                # we merged this with Free because Python doesn't support case fall-through
+                case Tile.BOX_LEFT | Tile.BOX_RIGHT | Tile.FREE:
 
-                    # if we're moving vertically, then we might be in contact with 0, 1 or 2 other boxes
-                    if next_tile == Tile.BOX_LEFT:
-                        other_box_pos = (next_pos[0] + 1, next_pos[1])
-                        other_box_tile = Tile.BOX_RIGHT
-                    elif next_tile == Tile.BOX_RIGHT:
-                        other_box_pos = (next_pos[0] - 1, next_pos[1])
-                        other_box_tile = Tile.BOX_LEFT
-                    
-                    # try moving both of the tiles above us 
-                    # we might be about to make a mistake, so take a copy of the map now, and pass that into the children
-                    # this is so we don't unnecessarily clone the map every single time, only when we're doing something we might need to undo 
-                    if cloned_map == None:
-                        cloned_map = copy.deepcopy(self.map)
-                    
-                    (first_box_moved, _) = self.move_boxes_starting_from(next_pos, delta, cloned_map=cloned_map)
-                    
-                    if not first_box_moved:
-                        return False, cloned_map
-                    
-                    (second_box_moved, _) = self.move_boxes_starting_from(other_box_pos, delta, cloned_map=cloned_map)
+                    # handle a partial box
+                    if next_tile != Tile.FREE:
+                        # if we're moving horizontally, it's no different to the one box case. just stack that up and move them at once
+                        if delta[1] == 0:
+                            continue
 
-                    if not second_box_moved:
-                        return False, cloned_map
-                     
-                    # if we succeeded, then we've shunted the box up and made some free space!
-                    # the one thing to bear in mind is that move_boxes_starting_from does not move the box itself (since the robot is not a box, and the other coordinate cannot follow it)
-                    # so we need to do that ourselves
-                    next_box_pos = (next_pos[0] + delta[0], next_pos[1] + delta[1])
-                    next_other_box_pos = (other_box_pos[0] + delta[0], other_box_pos[1] + delta[1])
-                    
-                    self.set_tile(next_box_pos, next_tile)
-                    self.set_tile(next_other_box_pos, other_box_tile)
+                        # if we're moving vertically, then we might be in contact with 0, 1 or 2 other boxes
+                        if next_tile == Tile.BOX_LEFT:
+                            other_box_pos = (next_pos[0] + 1, next_pos[1])
+                        elif next_tile == Tile.BOX_RIGHT:
+                            other_box_pos = (next_pos[0] - 1, next_pos[1])
+                        
+                        # try moving both of the tiles above us 
+                        # we might be about to make a mistake, so take a copy of the map now, and pass that into the children
+                        # this is so we don't unnecessarily clone the map every single time, only when we're doing something we might need to undo 
+                        if cloned_map == None:
+                            cloned_map = copy.deepcopy(self.map)
+                        
+                        (first_box_moved, _) = self.move_boxes_starting_from(next_pos, delta, cloned_map=cloned_map)
+                        
+                        if not first_box_moved:
+                            return False, cloned_map
+                        
+                        (second_box_moved, _) = self.move_boxes_starting_from(other_box_pos, delta, cloned_map=cloned_map)
 
-                    self.set_tile(next_pos, Tile.FREE)
-                    self.set_tile(other_box_pos, Tile.FREE)
+                        if not second_box_moved:
+                            return False, cloned_map
+                        
+                        # if we succeeded moving both parts of the box above us, we now have a free on top of us... so we can fall through into the free case
+                        # (my initial implementation actually wouldn't have worked in a mixed box type scenario I don't think, as we wouldn't have moved the other boxes we skipped over)
 
-                    return (True, None)
-
-                # if we hit a free, then we need to move the entire stack so far. we can do this by stepping back over the array and moving them in turn
-                case Tile.FREE:
                     # move them one by one starting from the previous position all the way back to the robot 
                     prev_pos = (next_pos[0] - delta[0], next_pos[1] - delta[1])
                     prev_tile = self.get_tile(prev_pos)
-                    while prev_tile in [Tile.BOX, Tile.BOX_LEFT, Tile.BOX_RIGHT]:
-                        self.set_tile(next_pos, prev_tile)
+
+                    prev_prev_pos = next_pos
+                    while True:
+                        self.set_tile(prev_prev_pos, prev_tile)
                         self.set_tile(prev_pos, Tile.FREE) # we free this temporarily
 
-                        next_pos = prev_pos
-                        prev_pos = (next_pos[0] - delta[0], next_pos[1] - delta[1])
-                        prev_tile = self.get_tile(prev_pos)
                         # if we're about to overstep our starting position, then stop here
-                        if next_pos == position:
+                        if prev_pos == position:
                             break
+
+                        prev_prev_pos = prev_pos
+                        prev_pos = (prev_pos[0] - delta[0], prev_pos[1] - delta[1])
+                        prev_tile = self.get_tile(prev_pos)
                     
                     return (True, None)
                 case _:
@@ -239,7 +231,7 @@ class Puzzle:
             this_map.execute_move(move)
 
             #print(f"Move {move}:\n{this_map}")
-        
+       
         return this_map
     
 def accept_map():
