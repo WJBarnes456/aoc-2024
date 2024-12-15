@@ -114,7 +114,7 @@ class Map:
     
     # worth noting that we can try moving boxes in whichever way, and it might eventually fail
     # a not-super-nice workaround here is to be eager and back out, undoing changes to the map if it fails at the top level
-    def move_boxes_starting_from(self, position, delta):
+    def move_boxes_starting_from(self, position, delta, cloned_map = None):
         next_pos = position
         while True:
             next_pos = (next_pos[0] + delta[0], next_pos[1] + delta[1])
@@ -122,7 +122,8 @@ class Map:
             match next_tile:
                 # if we hit a wall, nothing can happen, so just return (the move was a no-op)
                 case Tile.WALL:
-                    return False
+                    # we return the existing map in this scenario since we don't want to revert in the instance we just hit the wall without attempting to move anything
+                    return (False, self.map)
                 # if we hit a whole box, then we add it to the stack
                 case Tile.BOX:
                     continue
@@ -142,12 +143,21 @@ class Map:
                         other_box_tile = Tile.BOX_LEFT
                     
                     # try moving both of the tiles above us 
-                    success = self.move_boxes_starting_from(next_pos, delta) and self.move_boxes_starting_from(other_box_pos, delta)
+                    # we might be about to make a mistake, so take a copy of the map now, and pass that into the children
+                    # this is so we don't unnecessarily clone the map every single time, only when we're doing something we might need to undo 
+                    if cloned_map == None:
+                        cloned_map = copy.deepcopy(self.map)
                     
-                    # if we failed, then admit that so we can undo the horrible intermediate state we found ourselves in
-                    if not success:
-                        return False
+                    (first_box_moved, _) = self.move_boxes_starting_from(next_pos, delta, cloned_map=cloned_map)
                     
+                    if not first_box_moved:
+                        return False, cloned_map
+                    
+                    (second_box_moved, _) = self.move_boxes_starting_from(other_box_pos, delta, cloned_map=cloned_map)
+
+                    if not second_box_moved:
+                        return False, cloned_map
+                     
                     # if we succeeded, then we've shunted the box up and made some free space!
                     # the one thing to bear in mind is that move_boxes_starting_from does not move the box itself (since the robot is not a box, and the other coordinate cannot follow it)
                     # so we need to do that ourselves
@@ -160,7 +170,7 @@ class Map:
                     self.set_tile(next_pos, Tile.FREE)
                     self.set_tile(other_box_pos, Tile.FREE)
 
-                    return True
+                    return (True, None)
 
                 # if we hit a free, then we need to move the entire stack so far. we can do this by stepping back over the array and moving them in turn
                 case Tile.FREE:
@@ -178,7 +188,7 @@ class Map:
                         if next_pos == position:
                             break
                     
-                    return True
+                    return (True, None)
                 case _:
                     raise Exception(f"Unhandled tile {next_tile} at {next_pos}")
 
@@ -195,15 +205,14 @@ class Map:
         next_pos = self.robot_position
 
         # eagerly try moving all the boxes, if we can. we'll roll back if we fail.
-        cloned_map = copy.deepcopy(self.map)
-        boxes_moved = self.move_boxes_starting_from(self.robot_position, delta)
+        (boxes_moved, next_map) = self.move_boxes_starting_from(self.robot_position, delta)
 
         # if we moved boxes, the robot moved too!
         if boxes_moved:
             self.robot_position = (self.robot_position[0] + delta[0], self.robot_position[1] + delta[1])
         else:
             # we failed to move boxes, so pretend we never even tried
-            self.map = cloned_map
+            self.map = next_map
 
 class Puzzle:
     def __init__(self, puzzle_map, moves):
