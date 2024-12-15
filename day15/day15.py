@@ -193,17 +193,16 @@ class Map:
         direction_dict = {'<': (-1, 0), '^': (0, -1), '>': (1, 0), 'v': (0, 1)}
 
         delta = direction_dict[move]
-        # start by looking from the robot's own position
-        next_pos = self.robot_position
 
-        # eagerly try moving all the boxes, if we can. we'll roll back if we fail.
-        (boxes_moved, next_map) = self.move_boxes_starting_from(self.robot_position, delta)
+        # eagerly try moving the robot. this might fail, and if it does we'll be told what the map state used to be
+        # we let the underlying function make this decision as there's only one (relatively rare) path that we actually need to undo
+        (robot_moved, next_map) = self.move_boxes_starting_from(self.robot_position, delta)
 
-        # if we moved boxes, the robot moved too!
-        if boxes_moved:
+        # we successfully moved the robot!
+        if robot_moved:
             self.robot_position = (self.robot_position[0] + delta[0], self.robot_position[1] + delta[1])
         else:
-            # we failed to move boxes, so pretend we never even tried
+            # we failed to move the robot, so reset to the state we were told it was in before
             self.map = next_map
 
 class Puzzle:
