@@ -30,6 +30,14 @@ class Node:
             neighbour.neighbours.remove(self)
         
         self.tile_type = Tile.CORRUPTED
+    
+    def uncorrupt(self):
+        # just do the opposite of the above
+        self.tile_type = Tile.SAFE
+
+        for neighbour in self.neighbours:
+            neighbour.add_neighbour(self)
+            self.add_neighbour(neighbour)
 
 class Puzzle:
     def __init__(self, byte_positions, grid_size):
@@ -43,6 +51,7 @@ class Puzzle:
 
         for (i, byte) in enumerate(self.byte_positions):
             if i > 1023:
+                #print(f"Did not apply {byte}")
                 return corrupted_positions
             
             corrupted_positions.add(byte)
@@ -139,27 +148,40 @@ class Puzzle:
     
     # wow this is way easier than I was expecting... we just need a nice function to corrupt a node, and to keep the grid around
     # it would only be too slow if we tried rebuilding the grid every time, if we just make small adjustments then it's fine
-    # this implementation is O(byte_count * grid_size^2 log grid_size) since there are grid_size^2 vertices, and at most 4 edges per vertex, and we might need to run dijkstra for every single byte in the input
-    # an alternative implementation could binary-search the list of bytes, which would make it instead O (byte_count + grid_size^2 log grid_size log byte_count)
-    # (rebuilding the puzzle with the bytes up to a certain point: we can actually "uncorrupt" values by doing the exact opposite of corrupt and connecting them back together, so we don't need to reiterate it)
-    # definitely nicer for large byte_count values but far from necessary here
+    # This implementation is O (byte_count + grid_size^2 log grid_size log byte_count)
+    # - we run dijkstra log byte_count times, over a grid with grid_size^2 vertices and at most 4* that in edges, using a priority queue
+    # - to maintain the grid, we apply byte count revisions (even if it's somewhere in the middle, we'll end up undoing revisions until we have a precise bound)
+    # this is potentially slower than a purely iterative implementation if the byte count is extremely large and the first byte that breaks the path is comparatively early in the list
     def part2(self):
-        current_shortest_path = self.shortest_path()
-
         # consider each new byte
-        for byte in self.byte_positions[1023:]:
-            self.grid[byte[1]][byte[0]].corrupt()
+        lower_bound = 1023
+        current = 1023
+        upper_bound = len(self.byte_positions)-1
 
-            # if the byte isn't on the current path, then no need to recompute anything
-            # but if it does disrupt the path, then we might have something to worry about
-            if byte in current_shortest_path:
-                current_shortest_path = self.shortest_path()
+        while lower_bound != upper_bound:
+            next_pivot = (lower_bound + upper_bound) // 2
+            if current == next_pivot:
+                break
 
-            # if the puzzle is no longer solvable, this is the byte that broke the puzzle's back
-            if current_shortest_path == None:
-                return byte
+            if next_pivot > current:
+                for byte in self.byte_positions[current+1:next_pivot+1]:
+                    #print(f"Applying {byte}")
+                    self.grid[byte[1]][byte[0]].corrupt()
+            else:
+                for byte in reversed(self.byte_positions[next_pivot:current+1]):
+                    #print(f"Undoing {byte}")
+                    self.grid[byte[1]][byte[0]].uncorrupt()
 
-        return None
+            current = next_pivot
+
+            if self.shortest_path() == None:
+                #print(f"Too corrupt at {current}")
+                upper_bound = current
+            else:
+                #print(f"Insufficiently corrupt at {current}")
+                lower_bound = current
+
+        return self.byte_positions[upper_bound]
 
 
 
