@@ -14,9 +14,11 @@ class Tile(Enum):
     END = 2
 
 class Node:
-    def __init__(self, tile_type):
+    def __init__(self, tile_type, x, y):
         self.tile_type = tile_type
         self.neighbours = set()
+        self.x = x
+        self.y = y
     
     def add_neighbour(self, other_node):
         if self.tile_type != Tile.CORRUPTED and other_node.tile_type != Tile.CORRUPTED:
@@ -71,7 +73,7 @@ class Puzzle:
                 if (x,y) in corrupted_positions:
                     tile_type = Tile.CORRUPTED
 
-                node = Node(tile_type)
+                node = Node(tile_type, x, y)
 
                 if len(line) > 0:
                     left_node = line[-1]
@@ -93,34 +95,40 @@ class Puzzle:
         return start_node, grid
     
     # for part1: we've already initialised a graph we can run Dijkstra over, let's do that
-    def part1(self):
-        visited = set()
+    def shortest_path(self):
+        prev_node_lookup = {}
 
         # this is just for tiebreaks
         queue_counter = 1
 
         # we start at the start, which is no steps away
-        queue = [(0, 0, self.start_node)]
+        queue = [(0, 0, self.start_node, None)]
         heapify(queue)
 
         # consider all the nodes we can reach in n+1 steps
         while len(queue) > 0:
-            distance, _, node = heappop(queue)
-            if node in visited:
+            distance, _, node, prev_node = heappop(queue)
+            if node in prev_node_lookup:
                 continue
 
             # we found the shortest route to the end!
             if node.tile_type == Tile.END:
-                return distance
+                # follow the previous nodes all the way back
+                path = [(node.x, node.y)]
+                while prev_node is not None:
+                    path.append((prev_node.x, prev_node.y))
+                    prev_node = prev_node_lookup[prev_node]
+
+                return path
 
             # if not, consider everywhere we can go from here
             for neighbour in node.neighbours:
                 # do not go backwards
-                if neighbour not in visited:
-                    heappush(queue, (distance+1, queue_counter, neighbour))
+                if neighbour not in prev_node_lookup:
+                    heappush(queue, (distance+1, queue_counter, neighbour, node))
                     queue_counter += 1
 
-            visited.add(node)
+            prev_node_lookup[node] = prev_node
         
         return None
     
@@ -128,13 +136,19 @@ class Puzzle:
     # it would only be too slow if we tried rebuilding the grid every time, if we just make small adjustments then it's fine
     # could definitely be faster if we didn't rerun dijkstra for nodes that don't affect the current shortest path... I'll implement after
     def part2(self):
+        current_shortest_path = self.shortest_path()
+
+        # consider each new byte
         for byte in self.byte_positions[1023:]:
             self.grid[byte[1]][byte[0]].corrupt()
 
-            steps = self.part1()
+            # if the byte isn't on the current path, then no need to recompute anything
+            # but if it does disrupt the path, then we might have something to worry about
+            if byte in current_shortest_path:
+                current_shortest_path = self.shortest_path()
 
             # if the puzzle is no longer solvable, this is the byte that broke the puzzle's back
-            if steps == None:
+            if current_shortest_path == None:
                 return byte
 
         return None
@@ -163,7 +177,7 @@ def accept_input():
             return Puzzle(byte_positions, grid_size)
 
 def part1(puzzle):
-    return puzzle.part1()
+    return len(puzzle.shortest_path()) - 1
 
 def part2(puzzle):
     return puzzle.part2()
