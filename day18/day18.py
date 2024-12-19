@@ -21,13 +21,20 @@ class Node:
     def add_neighbour(self, other_node):
         if self.tile_type != Tile.CORRUPTED and other_node.tile_type != Tile.CORRUPTED:
             self.neighbours.add(other_node)
+    
+    def corrupt(self):
+        # when you corrupt a node, you need to change its tile type, and disconnect it from its neighbours
+        for neighbour in self.neighbours:
+            neighbour.neighbours.remove(self)
+        
+        self.tile_type = Tile.CORRUPTED
 
 class Puzzle:
     def __init__(self, byte_positions, grid_size):
         self.byte_positions = byte_positions
         self.grid_size = grid_size
 
-        self.part1_start = self.initialise_part1_grid()
+        self.start_node, self.grid = self.initialise_grid()
     
     def get_first_1024_corrupted_positions(self):
         corrupted_positions = set()
@@ -41,14 +48,14 @@ class Puzzle:
         return corrupted_positions
 
     
-    def initialise_part1_grid(self):
+    def initialise_grid(self):
         # part1 we can just Dijkstra no problem - we just need to build the actual grid first
         corrupted_positions = self.get_first_1024_corrupted_positions()
 
         # "You and The Historians are currently in the top left corner of the memory space (at 0,0)"
         start_node = None
-        prev_line = None
         
+        grid = []
         # both of these have an offset of 1 because we pass in 6, 70 and want those to be the corners
         for y in range(self.grid_size + 1):
             line = []
@@ -71,8 +78,8 @@ class Puzzle:
                     left_node.add_neighbour(node)
                     node.add_neighbour(left_node)
                 
-                if prev_line is not None:
-                    up_node = prev_line[x]
+                if len(grid) > 0:
+                    up_node = grid[-1][x]
                     up_node.add_neighbour(node)
                     node.add_neighbour(up_node)
                 
@@ -80,10 +87,10 @@ class Puzzle:
                     start_node = node
 
                 line.append(node)
-            
-            prev_line = line
-        
-        return start_node
+
+            grid.append(line)
+
+        return start_node, grid
     
     # for part1: we've already initialised a graph we can run Dijkstra over, let's do that
     def part1(self):
@@ -93,7 +100,7 @@ class Puzzle:
         queue_counter = 1
 
         # we start at the start, which is no steps away
-        queue = [(0, 0, self.part1_start)]
+        queue = [(0, 0, self.start_node)]
         heapify(queue)
 
         # consider all the nodes we can reach in n+1 steps
@@ -118,8 +125,19 @@ class Puzzle:
         return None
     
     # wow this is way easier than I was expecting... we just need a nice function to corrupt a node, and to keep the grid around
+    # it would only be too slow if we tried rebuilding the grid every time, if we just make small adjustments then it's fine
+    # could definitely be faster if we didn't rerun dijkstra for nodes that don't affect the current shortest path... I'll implement after
     def part2(self):
-        pass
+        for byte in self.byte_positions[1023:]:
+            self.grid[byte[1]][byte[0]].corrupt()
+
+            steps = self.part1()
+
+            # if the puzzle is no longer solvable, this is the byte that broke the puzzle's back
+            if steps == None:
+                return byte
+
+        return None
 
 
 
