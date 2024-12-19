@@ -95,19 +95,22 @@ class Puzzle:
         return start_node, grid
     
     # for part1: we've already initialised a graph we can run Dijkstra over, let's do that
+    # for part2: I augmented the nodes with the x and y coordinate, so we can turn this into A* for a small speedup
     def shortest_path(self):
         prev_node_lookup = {}
 
         # this is just for tiebreaks
         queue_counter = 1
 
-        # we start at the start, which is no steps away
-        queue = [(0, 0, self.start_node, None)]
+        # we start at the start, which is at least a full walk to the right and down away from the end
+        # (since we can only move up, down, left, right; manhattan distance is the number of steps assuming no obstacles)
+        queue = [(self.grid_size * 2, 0, 0, self.start_node, None)]
         heapify(queue)
 
         # consider all the nodes we can reach in n+1 steps
         while len(queue) > 0:
-            distance, _, node, prev_node = heappop(queue)
+            _, distance, _, node, prev_node = heappop(queue)
+            # skip slower routes to a node we already considered
             if node in prev_node_lookup:
                 continue
 
@@ -125,7 +128,9 @@ class Puzzle:
             for neighbour in node.neighbours:
                 # do not go backwards
                 if neighbour not in prev_node_lookup:
-                    heappush(queue, (distance+1, queue_counter, neighbour, node))
+                    # for A*: distance from that neighbour to the goal is again just manhattan distance, plus the number of steps actually taken
+                    heuristic = distance + 1 + (self.grid_size - neighbour.x) + (self.grid_size - neighbour.y)
+                    heappush(queue, (heuristic, distance + 1, queue_counter, neighbour, node))
                     queue_counter += 1
 
             prev_node_lookup[node] = prev_node
@@ -134,7 +139,10 @@ class Puzzle:
     
     # wow this is way easier than I was expecting... we just need a nice function to corrupt a node, and to keep the grid around
     # it would only be too slow if we tried rebuilding the grid every time, if we just make small adjustments then it's fine
-    # could definitely be faster if we didn't rerun dijkstra for nodes that don't affect the current shortest path... I'll implement after
+    # this implementation is O(byte_count * grid_size^2 log grid_size) since there are grid_size^2 vertices, and at most 4 edges per vertex, and we might need to run dijkstra for every single byte in the input
+    # an alternative implementation could binary-search the list of bytes, which would make it instead O (byte_count + grid_size^2 log grid_size log byte_count)
+    # (rebuilding the puzzle with the bytes up to a certain point: we can actually "uncorrupt" values by doing the exact opposite of corrupt and connecting them back together, so we don't need to reiterate it)
+    # definitely nicer for large byte_count values but far from necessary here
     def part2(self):
         current_shortest_path = self.shortest_path()
 
