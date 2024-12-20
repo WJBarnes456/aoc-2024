@@ -82,10 +82,10 @@ class Puzzle:
         return Puzzle(start_node, end_node, cheat_length)
 
     # strictly we only need one of these but having both as explicit entry points is nice
-    def __init__(self, start_node, end_node, cheat_length):
+    def __init__(self, start_node, end_node, max_cheat_length):
         self.start_node = start_node
         self.end_node = end_node
-        self.cheat_length = cheat_length
+        self.max_cheat_length = max_cheat_length
     
     # compute every node's distance to the exit - this will help us when we consider cheats later
     # since it's every node, just do some sort of search. I'll DFS it for ease of implementation
@@ -112,30 +112,32 @@ class Puzzle:
     # returns a list of all the cheats possible, sorted by time saved
     def find_cheats(self, from_node, distances):
         # figure out every node we could reach in that many steps
-        reachable = set()
-        reachable.add(from_node)
-        for _ in range(self.cheat_length):
+        reachables = [set([from_node])]
+        for _ in range(self.max_cheat_length):
             new_reachable = set()
-            for node in reachable:
+            for node in reachables[-1]:
                 for neighbour in node.cheat_neighbours:
                     new_reachable.add(neighbour)
 
-            reachable = new_reachable
+            reachables.append(new_reachable)
         
         # now figure out the time-save
-        cheats = []
-        for target_node in reachable:
-            # walls are never a time-save
-            if target_node.tile_type == Tile.WALL:
-                continue
+        # "Because this cheat has the same start and end positions as the one above, it's the same cheat"
+        # i.e. - there are multiple paths from a start node to a given target node (we could dawdle wandering through walls if we want), but we only count the shortest path to that node
+        cheats = {}
+        for (cheat_length, reachable_set) in enumerate(reachables):
+            for target_node in reachable_set:
+                # walls are never a time-save, and don't even bother looking one up we already saw
+                if target_node.tile_type == Tile.WALL or target_node in cheats:
+                    continue
 
-            # otherwise, the time saved is the difference in distances minus the length of the cheat, and track which node it's to (nb. set means we're not going to end up with duplicates)
-            time_save = distances[from_node] - distances[target_node] - self.cheat_length
-            cheats.append((time_save, target_node))
+                # otherwise, the time saved is the difference in distances minus the length of the cheat, and track which node it's to (nb. set means we're not going to end up with duplicates)
+                time_save = distances[from_node] - distances[target_node] - cheat_length
 
-        cheats.sort()
+                if time_save >= 0:
+                    cheats[target_node] = time_save
 
-        return cheats
+        return [(time_save, target_node) for (target_node, time_save) in cheats.items()]
 
         
     # every possible cheat is just skipping two tiles, and we can easily compute the time saved as the value on this node versus the distance so far
@@ -197,8 +199,10 @@ def part1(puzzle, debug=False):
     
     return over_100_count
 
-def part2(puzzle):
-    raise NotImplementedError("Part 2 not implemented")
+def part2(puzzle, debug=False):
+    puzzle.max_cheat_length = 20
+
+    return part1(puzzle, debug=debug)
 
 def main():
     puzzle = accept_input()
